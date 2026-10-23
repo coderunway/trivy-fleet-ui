@@ -152,6 +152,7 @@
       <tr>
         <th>Severity</th>
         <th>Container Image</th>
+        <th>Target / File Location</th> 
         <th>Vulnerability ID</th>
         <th>Package</th>
         <th>Installed</th>
@@ -448,6 +449,7 @@
           '<td><span class="badge ' + esc(v.severity) + '">' + esc(v.severity) + '</span></td>' +
           // '<td style="color: var(--cyan);">' + esc(v.image) + '</td>' +
           '<td><a href="' + esc(getContainerHubUrl(v.image)) + '" target="_blank" rel="noopener" style="color: var(--cyan); font-weight: 500;" title="Open container registry page">' + esc(v.image) + ' ↗</a></td>' +
+          '<td style="font-family: monospace; font-size: 11px; color: #a5f3fc; max-width: 220px; word-break: break-all;">' + esc(v.target) + '</td>' + 
           '<td><a href="' + esc(v.url) + '" target="_blank" rel="noopener">' + esc(v.cve) + '</a></td>' +
           '<td>' + esc(v.pkg) + '</td>' +
           '<td class="pkg-inst">' + esc(v.installed) + '</td>' +
