@@ -169,6 +169,7 @@
     var currentPage = 1;
     var pageSize = 50;
     var donutChart = null, barChart = null;
+    var previousScanStatus = 'idle'; 
 
     function esc(str) {
       if (!str) return '';
@@ -227,28 +228,33 @@
     }
 
     async function pollScanStatus() {
-      try {
-        var res = await fetch('/api/scan-status');
-        var st = await res.json();
-        var msg = document.getElementById('scanStatusMsg');
-        var btn = document.getElementById('startScanBtn');
+        try {
+            var res = await fetch('/api/scan-status');
+            var st = await res.json();
+            var msg = document.getElementById('scanStatusMsg');
+            var btn = document.getElementById('startScanBtn');
 
-        if (st.status === 'scanning') {
-          msg.className = 'status-banner status-scanning';
-          msg.textContent = '⏳ ' + st.message;
-          btn.disabled = true;
-        } else if (st.status === 'completed') {
-          msg.className = 'status-banner status-completed';
-          msg.textContent = '✅ ' + st.message;
-          btn.disabled = false;
-          loadReports();
-        } else {
-          msg.className = 'status-banner status-idle';
-          msg.textContent = 'Status: Ready';
-          btn.disabled = false;
-        }
-      } catch(e) {}
-    }
+            if (st.status === 'scanning') {
+            msg.className = 'status-banner status-scanning';
+            msg.textContent = '⏳ ' + st.message;
+            btn.disabled = true;
+            } else if (st.status === 'completed') {
+            msg.className = 'status-banner status-completed';
+            msg.textContent = '✅ ' + st.message;
+            btn.disabled = false;
+            // Only reload reports ONCE when transitioning from scanning -> completed
+            if (previousScanStatus === 'scanning') {
+                await loadReports();
+            }
+            } else {
+            msg.className = 'status-banner status-idle';
+            msg.textContent = 'Status: Ready';
+            btn.disabled = false;
+            }
+
+            previousScanStatus = st.status; // <-- Track the status
+        } catch(e) {}
+}
 
     async function loadReports() {
       try {
