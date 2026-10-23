@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  trivy-scanner:
+    image: aquasec/trivy:latest
+    container_name: trivy_scheduled_scanner
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${BASE_DIR:-/volume1/docker/trivy}/cache:/root/.cache/
+      - ${BASE_DIR:-/volume1/docker/trivy}/reports:/reports
+      - ${BASE_DIR:-/volume1/docker/trivy}/scanner/scan.sh:/scan.sh:ro
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["apk add --no-cache docker-cli jq && /bin/sh /scan.sh"]

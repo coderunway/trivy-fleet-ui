@@ -1,0 +1,20 @@
+# Purpose: Prevents scan outputs (.json), Trivy database caches, and local environment files from being uploaded to GitHub.
+
+# Vulnerability reports & cache
+reports/
+cache/
+*.json
+*.tmp
+
+# Environment & local settings
+.env
+*.local
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# OS metadata
+.DS_Store
+Thumbs.db
