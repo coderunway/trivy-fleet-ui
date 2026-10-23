@@ -446,7 +446,8 @@
         var v = pageRows[i];
         htmlStr += '<tr>' +
           '<td><span class="badge ' + esc(v.severity) + '">' + esc(v.severity) + '</span></td>' +
-          '<td style="color: var(--cyan);">' + esc(v.image) + '</td>' +
+          // '<td style="color: var(--cyan);">' + esc(v.image) + '</td>' +
+          '<td><a href="' + esc(getContainerHubUrl(v.image)) + '" target="_blank" rel="noopener" style="color: var(--cyan); font-weight: 500;" title="Open container registry page">' + esc(v.image) + ' ↗</a></td>' +
           '<td><a href="' + esc(v.url) + '" target="_blank" rel="noopener">' + esc(v.cve) + '</a></td>' +
           '<td>' + esc(v.pkg) + '</td>' +
           '<td class="pkg-inst">' + esc(v.installed) + '</td>' +
@@ -483,6 +484,31 @@
       document.getElementById('fixToggle').checked = false;
       document.getElementById('searchInput').value = '';
       applyFilters();
+    }
+
+    function getContainerHubUrl(img) {
+      if (!img) return '#';
+      // Strip tags (:latest) or digests (@sha256:...)
+      var raw = img.split(':')[0].split('@')[0];
+      var parts = raw.split('/');
+      
+      // Third-party registries (e.g. ghcr.io, quay.io)
+      if (parts.length > 1 && (parts[0].indexOf('.') !== -1 || parts[0].indexOf(':') !== -1)) {
+        if (parts[0] === 'ghcr.io') {
+          return 'https://github.com/' + parts.slice(1).join('/');
+        } else if (parts[0] === 'quay.io') {
+          return 'https://quay.io/repository/' + parts.slice(1).join('/');
+        }
+        return 'https://' + raw;
+      }
+      
+      // Docker Hub official images (e.g., alpine, python, redis)
+      if (parts.length === 1) {
+        return 'https://hub.docker.com/_/' + parts[0];
+      }
+      
+      // Docker Hub community/org images (e.g., lissy93/dashy, aquasec/trivy)
+      return 'https://hub.docker.com/r/' + raw;
     }
 
     init();
