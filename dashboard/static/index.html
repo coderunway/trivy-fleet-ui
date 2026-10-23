@@ -1,6 +1,3 @@
-<!-- Purpose: Single-page frontend dashboard with interactive Chart.js visualizations, metrics, filtering, and manual scan triggers.
--->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -20,8 +17,13 @@
     
     .scanner-panel { background: var(--panel); border: 1px solid var(--cyan); border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; }
     .scanner-panel h2 { margin: 0 0 12px 0; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
+    
+    .scanner-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+    .scanner-search { flex: 1; max-width: 380px; }
+    
     .image-checkbox-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; max-height: 160px; overflow-y: auto; padding: 8px; background: #0f172a; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 12px; }
     .image-item { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--text); }
+    .image-item.hidden { display: none !important; }
     .scan-btn { background: var(--cyan); color: #0f172a; border: none; padding: 8px 18px; border-radius: 6px; font-weight: 700; cursor: pointer; }
     .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .status-banner { margin-top: 10px; font-size: 13px; font-weight: 600; }
@@ -72,6 +74,10 @@
         <button class="btn" style="padding: 4px 10px; font-size: 12px;" onclick="selectAll(false)">Clear</button>
       </div>
     </h2>
+    <div class="scanner-controls">
+      <input type="text" id="hostScanFilter" class="scanner-search" placeholder="Type to filter containers (e.g. n8n, dashy)..." oninput="filterHostScanList()">
+      <span style="font-size: 12px; color: var(--muted);" id="hostScanCount"></span>
+    </div>
     <div class="image-checkbox-list" id="hostImageList">Loading NAS containers...</div>
     <div style="display: flex; align-items: center; justify-content: space-between;">
       <button class="scan-btn" id="startScanBtn" onclick="triggerScan()">⚡ Scan Selected Containers</button>
@@ -119,8 +125,9 @@
 
   <div class="filters-bar">
     <div>
-      <label style="font-size: 12px; color: var(--muted); margin-right: 6px;">Container:</label>
-      <select id="imgSelect" onchange="applyFilters()"><option value="ALL">All Containers</option></select>
+      <label style="font-size: 12px; color: var(--muted); margin-right: 6px;">Filter Container:</label>
+      <input type="text" id="containerFilterInput" list="containerDatalist" placeholder="Type or select container..." style="width: 250px;" oninput="applyFilters()">
+      <datalist id="containerDatalist"></datalist>
     </div>
     <div>
       <label style="font-size: 12px; color: var(--muted); margin-right: 6px;">Severity:</label>
@@ -169,11 +176,23 @@
     var currentPage = 1;
     var pageSize = 50;
     var donutChart = null, barChart = null;
-    var previousScanStatus = 'idle'; 
+    var previousScanStatus = 'idle';
 
     function esc(str) {
       if (!str) return '';
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // Helper: matches if full name starts with query, or repo/image component starts with query
+    function matchesPrefix(fullString, query) {
+      if (!query) return true;
+      var q = query.toLowerCase().trim();
+      var s = fullString.toLowerCase();
+      if (s.startsWith(q)) return true;
+      var slashParts = s.split('/');
+      var lastPart = slashParts[slashParts.length - 1];
+      if (lastPart.startsWith(q)) return true;
+      return s.indexOf(q) !== -1;
     }
 
     async function init() {
@@ -189,22 +208,41 @@
         var container = document.getElementById('hostImageList');
         if (images.length === 0) {
           container.innerHTML = '<span style="color:var(--muted); font-size:12px;">No running docker images found.</span>';
+          document.getElementById('hostScanCount').textContent = '';
           return;
         }
         var html = '';
         for (var i = 0; i < images.length; i++) {
-          html += '<label class="image-item">' +
+          html += '<label class="image-item" data-image="' + esc(images[i]) + '">' +
             '<input type="checkbox" class="img-cb" value="' + esc(images[i]) + '">' +
             '<span>' + esc(images[i]) + '</span>' +
           '</label>';
         }
         container.innerHTML = html;
+        filterHostScanList();
       } catch(e) {}
     }
 
+    function filterHostScanList() {
+      var query = document.getElementById('hostScanFilter').value.trim();
+      var items = document.querySelectorAll('.image-item');
+      var visibleCount = 0;
+      items.forEach(function(item) {
+        var imgName = item.getAttribute('data-image') || '';
+        if (matchesPrefix(imgName, query)) {
+          item.classList.remove('hidden');
+          visibleCount++;
+        } else {
+          item.classList.add('hidden');
+        }
+      });
+      document.getElementById('hostScanCount').textContent = 'Showing ' + visibleCount + ' of ' + items.length + ' containers';
+    }
+
     function selectAll(state) {
-      var cbs = document.querySelectorAll('.img-cb');
-      cbs.forEach(function(cb) { cb.checked = state; });
+      // Only select or deselect VISIBLE items matching the current filter
+      var visibleItems = document.querySelectorAll('.image-item:not(.hidden) .img-cb');
+      visibleItems.forEach(function(cb) { cb.checked = state; });
     }
 
     async function triggerScan() {
@@ -228,33 +266,32 @@
     }
 
     async function pollScanStatus() {
-        try {
-            var res = await fetch('/api/scan-status');
-            var st = await res.json();
-            var msg = document.getElementById('scanStatusMsg');
-            var btn = document.getElementById('startScanBtn');
+      try {
+        var res = await fetch('/api/scan-status');
+        var st = await res.json();
+        var msg = document.getElementById('scanStatusMsg');
+        var btn = document.getElementById('startScanBtn');
 
-            if (st.status === 'scanning') {
-            msg.className = 'status-banner status-scanning';
-            msg.textContent = '⏳ ' + st.message;
-            btn.disabled = true;
-            } else if (st.status === 'completed') {
-            msg.className = 'status-banner status-completed';
-            msg.textContent = '✅ ' + st.message;
-            btn.disabled = false;
-            // Only reload reports ONCE when transitioning from scanning -> completed
-            if (previousScanStatus === 'scanning') {
-                await loadReports();
-            }
-            } else {
-            msg.className = 'status-banner status-idle';
-            msg.textContent = 'Status: Ready';
-            btn.disabled = false;
-            }
+        if (st.status === 'scanning') {
+          msg.className = 'status-banner status-scanning';
+          msg.textContent = '⏳ ' + st.message;
+          btn.disabled = true;
+        } else if (st.status === 'completed') {
+          msg.className = 'status-banner status-completed';
+          msg.textContent = '✅ ' + st.message;
+          btn.disabled = false;
+          if (previousScanStatus === 'scanning') {
+            await loadReports();
+          }
+        } else {
+          msg.className = 'status-banner status-idle';
+          msg.textContent = 'Status: Ready';
+          btn.disabled = false;
+        }
 
-            previousScanStatus = st.status; // <-- Track the status
-        } catch(e) {}
-}
+        previousScanStatus = st.status;
+      } catch(e) {}
+    }
 
     async function loadReports() {
       try {
@@ -262,16 +299,14 @@
         rawData = await res.json();
         document.getElementById('fleet-meta').textContent = 'Total Scanned Images: ' + rawData.images.length;
 
-        var sel = document.getElementById('imgSelect');
-        var currVal = sel.value;
-        sel.innerHTML = '<option value="ALL">All Containers</option>';
+        // Populate datalist for type-to-filter container input
+        var dl = document.getElementById('containerDatalist');
+        dl.innerHTML = '';
         rawData.images.forEach(function(img) {
           var opt = document.createElement('option');
           opt.value = img;
-          opt.textContent = img;
-          sel.appendChild(opt);
+          dl.appendChild(opt);
         });
-        sel.value = currVal || 'ALL';
 
         renderCharts();
         applyFilters();
@@ -344,7 +379,7 @@
           plugins: { legend: { labels: { color: '#94a3b8' } } },
           onClick: function(evt, el) {
             if (el.length > 0) {
-              document.getElementById('imgSelect').value = sortedImages[el[0].index];
+              document.getElementById('containerFilterInput').value = sortedImages[el[0].index];
               applyFilters();
             }
           }
@@ -353,7 +388,7 @@
     }
 
     function applyFilters() {
-      var selectedImg = document.getElementById('imgSelect').value;
+      var containerQuery = document.getElementById('containerFilterInput').value.trim();
       var selectedSev = document.getElementById('sevSelect').value;
       var fixableOnly = document.getElementById('fixToggle').checked;
       var query = document.getElementById('searchInput').value.toLowerCase().trim();
@@ -362,7 +397,7 @@
       activeFiltered = [];
 
       rawData.vulnerabilities.forEach(function(v) {
-        var matchesImg = (selectedImg === 'ALL' || v.image === selectedImg);
+        var matchesImg = matchesPrefix(v.image, containerQuery);
         var matchesSev = (selectedSev === 'ALL' || v.severity === selectedSev);
         var isFixable = (v.fixed && v.fixed !== 'None');
         var matchesFix = (!fixableOnly || isFixable);
@@ -443,7 +478,7 @@
     }
 
     function resetFilters() {
-      document.getElementById('imgSelect').value = 'ALL';
+      document.getElementById('containerFilterInput').value = '';
       document.getElementById('sevSelect').value = 'ALL';
       document.getElementById('fixToggle').checked = false;
       document.getElementById('searchInput').value = '';
